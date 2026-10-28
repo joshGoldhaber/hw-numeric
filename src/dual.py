@@ -139,7 +139,6 @@ class Dual:
     v: object
     d: object
 
-    # A dataclass with __eq__ would otherwise set __hash__ to None.
     def __hash__(self):
         return hash((self.v, self.d))
 
@@ -162,12 +161,10 @@ class Dual:
         return Dual(self.v - other, self.d)
 
     def __rsub__(self, other):
-        # other is a plain number, so its derivative is 0
         return Dual(other - self.v, -self.d)
 
     def __mul__(self, other):
         if isinstance(other, Dual):
-            # product rule
             return Dual(self.v * other.v, self.d * other.v + self.v * other.d)
         return Dual(self.v * other, self.d * other)
 
@@ -181,16 +178,13 @@ class Dual:
         return Dual(self.v / other, self.d / other)
 
     def __rtruediv__(self, other):
-        # other is a plain number, so its derivative is 0
         return Dual(other / self.v, -other * self.d / (self.v ** 2))
 
     def __pow__(self, other):
         if isinstance(other, Dual):
-            # x ** y == exp(y * log(x)), then use the chain rule
             return exp(other * log(self))
         if other == 0:
             return Dual(1.0, 0.0)
-        # power rule
         return Dual(self.v ** other, other * self.v ** (other - 1) * self.d)
 
 
