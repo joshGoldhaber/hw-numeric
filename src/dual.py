@@ -106,6 +106,7 @@ Dual(v=1.0, d=1.0)
 import math
 from dataclasses import dataclass
 
+
 @dataclass
 class Dual:
     '''

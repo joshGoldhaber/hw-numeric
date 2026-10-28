@@ -311,8 +311,10 @@ def _karatsuba(a, b):
     a_sum = _add_lists(a_low, a_high)
     b_sum = _add_lists(b_low, b_high)
     middle = _karatsuba(a_sum, b_sum)
-    middle = [m - l for m, l in zip(middle, low + [0] * (len(middle) - len(low)))]
-    middle = [m - h for m, h in zip(middle, high + [0] * (len(middle) - len(high)))]
+    low_padded = low + [0] * (len(middle) - len(low))
+    high_padded = high + [0] * (len(middle) - len(high))
+    middle = [m - lo - hi
+              for m, lo, hi in zip(middle, low_padded, high_padded)]
 
     out = [0] * (2 * n)
     for i, c in enumerate(low):
