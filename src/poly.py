@@ -105,6 +105,120 @@ class Poly:
     >>> print(Poly([1, 0, 2]))
     2x**2 + 1
     '''
+    def __init__(self, coeffs):
+        coeffs = list(coeffs)
+        # drop trailing zeros so equal polynomials have equal coeffs
+        while coeffs and coeffs[-1] == 0:
+            coeffs.pop()
+        self.coeffs = coeffs if coeffs else [0]
+
+    def __repr__(self):
+        return f'Poly({self.coeffs})'
+
+    def __str__(self):
+        terms = []
+        for degree in range(len(self.coeffs) - 1, -1, -1):
+            c = self.coeffs[degree]
+            if c == 0:
+                continue
+            # the number part is hidden when it is 1 or -1 on an x term
+            if degree > 0 and abs(c) == 1:
+                number = ''
+            else:
+                number = str(abs(c))
+            if degree == 0:
+                variable = ''
+            elif degree == 1:
+                variable = 'x'
+            else:
+                variable = f'x**{degree}'
+            sign = '-' if c < 0 else '+'
+            terms.append((sign, number + variable))
+        if not terms:
+            return '0'
+        first_sign, first_body = terms[0]
+        result = ('-' if first_sign == '-' else '') + first_body
+        for sign, body in terms[1:]:
+            result += f' {sign} {body}'
+        return result
+
+    def __eq__(self, other):
+        if not isinstance(other, Poly):
+            return NotImplemented
+        return self.coeffs == other.coeffs
+
+    # mutable value type: deliberately unhashable
+    __hash__ = None
+
+    def __call__(self, x):
+        return self.eval_horner(x)
+
+    def __neg__(self):
+        return Poly([-c for c in self.coeffs])
+
+    def __add__(self, other):
+        a, b = self.coeffs, other.coeffs
+        size = max(len(a), len(b))
+        a = a + [0] * (size - len(a))
+        b = b + [0] * (size - len(b))
+        return Poly([x + y for x, y in zip(a, b)])
+
+    def __sub__(self, other):
+        return self + (-other)
+
+    def __mul__(self, other):
+        return self.mul_karatsuba(other)
+
+    def __pow__(self, n):
+        if n < 0:
+            raise ValueError('negative exponents are not supported')
+        # exponentiation by squaring
+        result = Poly([1])
+        base = self
+        while n > 0:
+            if n % 2 == 1:
+                result = result * base
+            base = base * base
+            n //= 2
+        return result
+
+    # in-place versions modify self and return it
+    def __iadd__(self, other):
+        self.coeffs = (self + other).coeffs
+        return self
+
+    def __isub__(self, other):
+        self.coeffs = (self - other).coeffs
+        return self
+
+    def __imul__(self, other):
+        self.coeffs = (self * other).coeffs
+        return self
+
+    def __ipow__(self, n):
+        self.coeffs = (self ** n).coeffs
+        return self
+
+    def derivative(self):
+        '''
+        The derivative, using the power rule.
+
+        >>> print(Poly([1, 2, 3]).derivative())
+        6x + 2
+        >>> print(Poly([5]).derivative())
+        0
+        '''
+        return Poly([i * c for i, c in enumerate(self.coeffs)][1:])
+
+    def mul_karatsuba(self, other):
+        '''
+        Multiplication using Karatsuba's algorithm.
+
+        >>> Poly([1, 2]).mul_karatsuba(Poly([3, 4]))
+        Poly([3, 10, 8])
+        '''
+        return Poly(_karatsuba(self.coeffs, other.coeffs))
+
     def eval_naive(self, x):
         '''
         Evaluate by summing a_i * x**i one term at a time.  The
@@ -179,3 +293,42 @@ def _karatsuba(a, b):
     >>> _karatsuba([0], [1, 2, 3])
     [0, 0, 0]
     '''
+    result_length = len(a) + len(b) - 1
+    # pad both to the same length n
+    n = max(len(a), len(b))
+    a = a + [0] * (n - len(a))
+    b = b + [0] * (n - len(b))
+    if n == 1:
+        return [a[0] * b[0]]
+
+    half = n // 2
+    a_low, a_high = a[:half], a[half:]
+    b_low, b_high = b[:half], b[half:]
+
+    low = _karatsuba(a_low, b_low)
+    high = _karatsuba(a_high, b_high)
+    # (a_low + a_high)(b_low + b_high) - low - high is the cross term
+    a_sum = _add_lists(a_low, a_high)
+    b_sum = _add_lists(b_low, b_high)
+    middle = _karatsuba(a_sum, b_sum)
+    middle = [m - l for m, l in zip(middle, low + [0] * (len(middle) - len(low)))]
+    middle = [m - h for m, h in zip(middle, high + [0] * (len(middle) - len(high)))]
+
+    out = [0] * (2 * n)
+    for i, c in enumerate(low):
+        out[i] += c
+    for i, c in enumerate(middle):
+        out[i + half] += c
+    for i, c in enumerate(high):
+        out[i + 2 * half] += c
+    # trailing entries beyond the true product length are zeros
+    out = out[:result_length]
+    return out
+
+
+def _add_lists(a, b):
+    '''Add two coefficient lists of any lengths.'''
+    size = max(len(a), len(b))
+    a = a + [0] * (size - len(a))
+    b = b + [0] * (size - len(b))
+    return [x + y for x, y in zip(a, b)]

@@ -25,7 +25,7 @@ Observe that the function takes a list of numbers as the input and recursively c
 Computing the derivative of this function by hand is a nightmare.
 
 The magic of autodiff is that dual numbers let us compute the derivative automatically for *all* functions f.
-And in practice, it is common to compute the derivative of functions  much more complicated than the rnn function above.
+And in practice, it is common to compute the derivative of functions much more complicated than the rnn function above.
 
 The procedure is simple but counter-intuitive:
 
@@ -104,7 +104,9 @@ Dual(v=0.0, d=1.0)
 Dual(v=1.0, d=1.0)
 '''
 import math
+from dataclasses import dataclass
 
+@dataclass
 class Dual:
     '''
     The dual number v + d*epsilon with epsilon**2 == 0.
@@ -133,6 +135,62 @@ class Dual:
     >>> print(Dual(1, 2) + Dual(3, 4))
     4 + 6ε
     '''
+    v: object
+    d: object
+
+    # A dataclass with __eq__ would otherwise set __hash__ to None.
+    def __hash__(self):
+        return hash((self.v, self.d))
+
+    def __str__(self):
+        return f'{self.v} + {self.d}ε'
+
+    def __neg__(self):
+        return Dual(-self.v, -self.d)
+
+    def __add__(self, other):
+        if isinstance(other, Dual):
+            return Dual(self.v + other.v, self.d + other.d)
+        return Dual(self.v + other, self.d)
+
+    __radd__ = __add__
+
+    def __sub__(self, other):
+        if isinstance(other, Dual):
+            return Dual(self.v - other.v, self.d - other.d)
+        return Dual(self.v - other, self.d)
+
+    def __rsub__(self, other):
+        # other is a plain number, so its derivative is 0
+        return Dual(other - self.v, -self.d)
+
+    def __mul__(self, other):
+        if isinstance(other, Dual):
+            # product rule
+            return Dual(self.v * other.v, self.d * other.v + self.v * other.d)
+        return Dual(self.v * other, self.d * other)
+
+    __rmul__ = __mul__
+
+    def __truediv__(self, other):
+        if isinstance(other, Dual):
+            # quotient rule
+            return Dual(self.v / other.v,
+                        (self.d * other.v - self.v * other.d) / (other.v ** 2))
+        return Dual(self.v / other, self.d / other)
+
+    def __rtruediv__(self, other):
+        # other is a plain number, so its derivative is 0
+        return Dual(other / self.v, -other * self.d / (self.v ** 2))
+
+    def __pow__(self, other):
+        if isinstance(other, Dual):
+            # x ** y == exp(y * log(x)), then use the chain rule
+            return exp(other * log(self))
+        if other == 0:
+            return Dual(1.0, 0.0)
+        # power rule
+        return Dual(self.v ** other, other * self.v ** (other - 1) * self.d)
 
 
 def sin(x):
@@ -169,6 +227,11 @@ def tanh(x):
     # this is the only one of these functions you need to implement
     # there's only one doctest here,
     # but lots of other tests depend on tanh
+
+    if isinstance(x, Dual):
+        t = math.tanh(x.v)
+        return Dual(t, (1 - t ** 2) * x.d)
+    return math.tanh(x)
 
 
 def exp(x):
